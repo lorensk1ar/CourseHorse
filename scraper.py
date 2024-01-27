@@ -1,6 +1,6 @@
 ## FUNCTIONS
-def create_new_json():
-    json = {
+def create_new_dict():
+    dict = {
         "provider": None,
         "records": None,
         "purge_before": None,
@@ -41,7 +41,7 @@ def create_new_json():
         ]
     }
 
-    return json
+    return dict
 
 def post_json_data(endpoint, data):
     # create an HTML session
@@ -96,7 +96,7 @@ def get_actors_connection():
             url = "https:" + link
             
             # initialize empty json object
-            json = create_new_json()
+            dict = create_new_dict()
 
             # request class data
             data = session.get(url)
@@ -104,10 +104,10 @@ def get_actors_connection():
             # parse class data & update json
             # course_name
             tag = "h1"
-            json["sections"][0]["course_name"] = data.html.find(tag, first=True).text
+            dict["sections"][0]["course_name"] = data.html.find(tag, first=True).text
     
             # url
-            json["sections"][0]["url"] = url
+            dict["sections"][0]["url"] = url
 
             # available_seats incl date
     
@@ -125,17 +125,18 @@ def get_actors_connection():
                 except:
                     price = None
 
-            json["sections"][0]["price"] = price
+            dict["sections"][0]["price"] = price
 
-            # postjson object
-            # endpoint = "https://horseshoe.coursehorse.com/sync"
-            # post_json_data(endpoint, json = json):
+            # post json object
+            # json_data = json.dumps(dict)
+            # post_url = "https://horseshoe.coursehorse.com/sync"
+            # post_json_data(post_url, json = json_data):
 
 def get_all_providers():
     get_actors_connection()
-        
 
 ## MAIN
+import json
 import math
 from requests_html import HTMLSession
 
