@@ -1,0 +1,25 @@
+set up test environment
+possible to post data?
+possible to get data?
+
+short course name?
+
+error handling if price is text rather than integer?
+
+parse location type
+parse locations
+parse notes
+parse teacher
+parse enrollment close date
+
+parse available seats
+parse date
+parse start time
+parse end time
+
+more than one section?
+
+provider lookup?
+purge_before timestamp
+scrape notices
+
