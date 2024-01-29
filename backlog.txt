@@ -2,24 +2,24 @@ set up test environment
 possible to post data?
 possible to get data?
 
-short course name?
+purge_before timestamp
 
-error handling if price is text rather than integer?
+m parse available seats
+y error handling if price is text rather than integer?
 
-parse location type
-parse locations
-parse notes
-parse teacher
-parse enrollment close date
-
-parse available seats
 parse date
 parse start time
 parse end time
 
+parse location type
+parse location
+parse notes
+parse teacher
+parse enrollment close date
+
 more than one section?
 
 provider lookup?
-purge_before timestamp
 scrape notices
+short course name?
 
