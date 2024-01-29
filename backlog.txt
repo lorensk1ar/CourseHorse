@@ -1,13 +1,14 @@
+write jsonify method
+
 set up test environment
 possible to post data?
 possible to get data?
 
 purge_before timestamp
 
-remove seminars
-
 m parse available seats
 y error handling if price is text rather than integer?
+y remove seminars
 
 parse date
 parse start time
