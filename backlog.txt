@@ -4,6 +4,8 @@ possible to get data?
 
 purge_before timestamp
 
+remove seminars
+
 m parse available seats
 y error handling if price is text rather than integer?
 
