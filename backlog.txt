@@ -3,15 +3,23 @@ possible to post data?
 possible to get data?
 
 m parse available seats
-y error handling if price is text rather than integer?
-y jsonify data
-y remove seminars
+    are available seats by section or by session?
+    sold out, only a few seats available other?
 
-purge_before timestamp
+m purge_before timestamp
+    12 vs 24? 
+    Eastern Time Zone
+
+y remove seminars
+y jsonify data
+y all sections in one json
+y error handling if price is text rather than integer?
 
 parse date
 parse start time
 parse end time
+
+more than one session?
 
 parse location type
 parse location
