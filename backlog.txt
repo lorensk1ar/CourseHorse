@@ -1,35 +1,34 @@
-set up test environment
-possible to post data?
-possible to get data?
+## NOTES
+assumes 5 seats are available if class is not full
+assumes length of session is 2 hours
+
+## TO DO
+construct separate json objects if more than 100 sections
+construct dictionary using for key, value in vars(self).items():
+short course name up to first comma?
 
 m parse available seats
     are available seats by section or by session?
     sold out, only a few seats available other?
 
+m price
+    error handling for "This event is full."?
+    error handling for "Registration is closed for this event."?
+    others?
+
+m parse teacher better including multiple teachers?
+
 m purge_before timestamp
     12 vs 24? 
     Eastern Time Zone
 
-y remove seminars
-y jsonify data
-y all sections in one json
-y error handling if price is text rather than integer?
-
-parse date
-parse start time
-parse end time
-
-more than one session?
-
-parse location type
-parse location
 parse notes
-parse teacher
-parse enrollment close date
+parse enrollment close
+scrape notices?
 
-more than one section?
+correct providers?
+correct provider course ids?
+some sites expose a reliable SKU, UUID, or other identifier?
 
-provider lookup?
-scrape notices
-short course name?
+
 
