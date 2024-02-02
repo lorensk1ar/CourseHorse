@@ -10,26 +10,34 @@ class Provider:
         name,
         url,
         records,
-        nav_tag,
+        page_url_tag,
         section_url_tag,
         section_id_tag,
         section_name_tag,
         section_available_tag,
         section_price_tag,
         section_teacher_tag,
+        page_url_start = None,
+        page_url_stop = None,
+        url_prefix = "",
+        default_session_length = 2,
         remove_if = []
         ):
 
         self.name = name
         self. url = url
         self.records = records
-        self.nav_tag = nav_tag
+        self.page_url_tag = page_url_tag
         self.section_url_tag = section_url_tag
         self.section_id_tag = section_id_tag
         self.section_name_tag = section_name_tag
         self.section_available_tag = section_available_tag
         self.section_price_tag = section_price_tag
         self.section_teacher_tag = section_teacher_tag
+        self.page_url_start = page_url_start
+        self.page_url_stop = page_url_stop
+        self.url_prefix = url_prefix
+        self.default_session_length = default_session_length
         self.remove_if = remove_if
 
 class Scrape:
@@ -173,10 +181,12 @@ def clean_urls(
     prefix: str = ""
     ):
     
+    '''
     if start is None:
         start = 0
     if stop is None:
         stop = len(raw_urls)
+    '''
         
     urls = list(map(lambda url: prefix + url, raw_urls[start:stop:step]))
     
@@ -187,11 +197,6 @@ def create_new_dictionary(key_value_pairs):
     for key, value in key_value_pairs:
         new_dictionary[key] = value
     return new_dictionary
-
-def get_timestamp(form):
-    tmp = datetime.now()
-    timestamp = tmp.strftime(form)
-    return timestamp
 
 def extract_from_container(container, tag, attr):
     results = []
@@ -214,7 +219,11 @@ def extract_from_container_list(container_list, tag, attr):
     # return results    
     return results    
  
-def get_container_from_html(
+def fetch_all(session, url):
+    response = session.get(url)
+    return response
+
+def fetch_container(
     session,
     url: str,
     containertag: str
@@ -236,7 +245,7 @@ def get_container_from_html(
     # return container
     return container
 
-def get_container_list_from_html(
+def fetch_container_list(
     session,
     url: str,
     containertag: str,
@@ -258,8 +267,212 @@ def get_container_list_from_html(
     # return container
     return container_list
 
+def fetch_page_url_list(
+    session,
+    provider_url,
+    page_url_tag):
+    
+    page_list_container = fetch_container(
+        session,
+        provider_url,
+        page_url_tag,
+        )
+
+    page_urls = extract_from_container(
+        page_list_container,
+        tag = 'a',
+        attr = 'href')
+
+    return page_urls
+
+def fetch_section_url_list(
+    session,
+    page_urls,
+    section_url_tag
+    ):
+
+    # loop through pages
+    section_urls = []
+    for page_url in page_urls:
+        section_container_list = fetch_container_list(
+            session,
+            page_url,
+            section_url_tag,
+        )
+
+        some_urls = extract_from_container_list(
+            section_container_list,
+            tag = 'a',
+            attr = 'href')
+        
+        section_urls += some_urls
+
+    return section_urls
+
+def get_section_urls(session, provider):
+    raw_page_urls = fetch_page_url_list(
+        session,
+        provider.url,
+        provider.page_url_tag
+        )
+
+    page_urls = clean_urls(
+        raw_urls = raw_page_urls,
+        start = provider.page_url_start,
+        stop = provider.page_url_stop,
+        prefix = provider.url_prefix
+        )
+
+    raw_section_urls = fetch_section_url_list(
+        session,
+        page_urls,
+        provider.section_url_tag
+        )
+
+    section_urls = clean_urls(
+        raw_section_urls,
+        prefix = provider.url_prefix
+        )
+
+    return section_urls
+
+def get_timestamp(form):
+    tmp = datetime.now()
+    timestamp = tmp.strftime(form)
+    return timestamp
+
+def is_valid_section(section, provider):
+    if section.price == 0:
+        return False
+
+    if section.price == 9999.99:
+        return False
+
+    section_name_lowercase = section.course_name.lower()
+    for item in provider.remove_if:
+        item_lowercase = item.lower()
+        index = section_name_lowercase.find(item_lowercase)
+        if index >= 0:
+            return False
+        
+    return True
+
 def log_error_message(action, url, status):
     print(f'{action} request from {url} returns status {status}')
+
+def parse_sessions_data(response, provider):
+    sessions_list = []
+
+    sessions_html = response.html.find('td')
+    sessions_text = [item.text for item in sessions_html]
+    item_count = len(sessions_text)
+    for i in range(0, item_count, 2):
+        # determine data
+        date_text = sessions_text[i]
+        date_value = datetime.strptime(date_text, "%A, %B %d, %Y").date()
+        session_date = date_value.strftime("%Y-%m-%d")
+        
+        # determine start time
+        start_time_text = sessions_text[i+1]
+        start_time_value = datetime.strptime(start_time_text, "%I:%M %p").time()
+        session_start_time = start_time_value.strftime("%H:%M:%S")
+
+        # determine end time
+        # use default length if necessary
+        end_time_value = (datetime.combine(datetime.min, start_time_value) + timedelta(hours = provider.default_session_length)).time()
+        session_end_time = end_time_value.strftime("%H:%M:%S")
+        
+        # construct session object
+        new_session = Session(session_date, session_start_time, session_end_time)
+
+        # add to sessions list
+        sessions_list.append(new_session)
+
+    return sessions_list
+
+def parse_section_data(url, response, provider):
+    # parse course id
+    section_id = response.html.find(provider.section_id_tag, first = True).attrs["content"]
+
+    # parse course name
+    section_name = response.html.find(provider.section_name_tag, first = True).attrs["content"]
+
+    # parse course url
+    section_url = url
+
+    # parse available seats
+    section_full = response.html.find(provider.section_available_tag, first = True)
+
+    if section_full:
+        available_seats = 0
+    else:
+        available_seats = 5
+    
+    # parse price
+    price_text = response.html.find(provider.section_price_tag, first = True).text
+    original_text = price_text[0:]
+
+    print(section_url)
+    print(price_text)
+    
+    section_notes = ""
+
+    # remove initial word
+    prefix = "Price: "
+    prefix_index = price_text.find(prefix)
+    if prefix_index == 0:
+        price_text = price_text[len(prefix):]
+
+    # remove any trailing words
+    newline_index = price_text.find("\n")
+    if newline_index > 0:
+        section_notes = price_text[newline_index:]
+        section_notes = section_notes.strip()
+        price_text = price_text[:newline_index]
+            
+    # convert "Free" to "0"
+    if price_text == "Free":
+        price_text = "0"
+
+    try:
+        price_text = price_text.strip("$")
+        section_price = float(price_text)
+
+    except:
+        section_price = 9999.99
+        section_notes = original_text
+        
+    print(price_text)
+    print(section_price)
+    print(section_notes)
+    print("\n")
+
+
+    # parse sessions
+    sessions_list = parse_sessions_data(response, provider)
+
+    '''
+    # parse location
+
+    # parse notes
+
+    # parse teacher
+    tmp = response.html.find(provider.section_teacher_tag)
+    session_teacher = tmp[-1].text
+
+    # parse enrollment close
+    '''
+
+    new_section = Section(
+        provider_course_id = section_id,
+        course_name = section_name,
+        url = section_url,
+        available_seats = available_seats,
+        price = section_price,
+        sessions = sessions_list,
+        notes = section_notes)
+
+    return new_section
 
 def post_json_data(endpoint, data):
     # create an HTML session
@@ -270,7 +483,7 @@ def post_json_data(endpoint, data):
 
     # check status of request
     if response.status_code == 200:
-        print("POST request received")
+        ("POST request received")
         print("Response:", response.text)
     else:
         print("POST request failed")
@@ -278,3 +491,6 @@ def post_json_data(endpoint, data):
 
     # close session
     session.close()
+
+
+
