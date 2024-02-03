@@ -1,113 +1,274 @@
 '''
 ## NOTES
-removes seminars
 removes free classes
-sets price at $9999.99 if unable to parse price
-then removes
+removes full classes
+removes seminars
 
-assumes 5 seats are available if class is not full
+assumes 6 seats are available if no other information
 assumes length of session is 2 hours
 
 
 ## TO DO
-parse price better including list of text responses?
-parse teacher better including multiple teachers?
-construct separate json objects if more than 100 sections
-docstrings for library esp IN & OUT datatypes?
-construct dictionary using for key, value in vars(self).items():
+send separate scrape json for each page
+with purge before on first page only
+parse teacher including multiple teachers?
 parse enrollment close
 parse notes
 include scrape notes?
-some sites expose a reliable SKU, UUID, or other identifier?
+parse short course name up to comma?
 
 '''
 
-## LIBRARIES
-from horselibrary import *
+### LIBRARIES
+from datetime import datetime, timedelta
+import json
+from requests_html import HTMLSession
 
-## FUNCTIONS
-def scrape_provider(provider: dict):
-    # open html session
+### FUNCTIONS
+def scrape_actors_connection():
+    ## set constants
+    provider_url = "https://www.actorsconnection.com/classes/"
+    url_prefix = "https:"
+    default_seats = 6
+    default_session_hours = 2
+
+    ## get time stamp
+    tmp = datetime.now()
+    purge_before = tmp.strftime("%Y-%m-%d %H:%M:%S")
+
+    ## open html session
     html_session = HTMLSession()
 
-    # get time stamp
-    purge_before = get_timestamp("%Y-%m-%d %H:%M:%S")
+    ## get section links
+    # create list for page urls
+    raw_page_urls = []
 
-    # get section urls
-    section_urls = get_section_urls(html_session, provider)
+    # fetch page links
+    response = html_session.get(provider_url)
 
+    # if valid response
+    if response.status_code == 200:
+        # extract page containers
+        page_container = response.html.find("ul.pagination", first = True)
+
+        # loop through items in page container
+        for item in page_container.find('a'):
+            # extract page url and add to list
+            raw_page_urls.append(item.attrs['href'])
+
+    # if error 
+    else:
+        # log error
+        log_error_message("GET", provider_url, response.status_code)
+
+    # clean page urls
+    page_urls = list(map(lambda url: url_prefix + url, raw_page_urls[1:-1]))
+
+    # create list for section data
+    sections_data = []
+    
+    # loop through page links
+    for page_url in page_urls:
+        # fetch section links
+        response = html_session.get(page_url)
+
+        # if valid response
+        if response.status_code == 200:
+            # extract section containers       
+            section_containers = response.html.find('div.listing')
+
+            # loop through section containers
+            for section_container in section_containers:
+                # extract section url from container
+                item = section_container.find('a', first=True)
+                if item:
+                    raw_section_url = item.attrs['href']
+                else:
+                    raw_section_url = ""
+
+                # clean section url
+                section_url = url_prefix + raw_section_url
+                
+                # extract section price from container
+                item = section_container.find('span.price', first=True)
+                if item:
+                    section_price = item.text
+                else:
+                    section_price = ""
+                    
+                # extract warning label from container
+                item = section_container.find('span.label', first=True)
+                if item:
+                    section_warning = item.text
+                else:
+                    section_warning = ""
+            
+                # add section to list
+                section_data = (section_url, section_price, section_warning)
+                sections_data.append(section_data)
+                
+        # if error 
+        else:
+            # log error
+            log_error_message("GET", page_url, response.status_code)
+
+    ### REMOVE ###
+    from random import shuffle
+    shuffle(sections_data)
+    sections_data = sections_data[:1]
+    ### REMOVE ###
+    
+    # create list for sections
+    sections = []
+
+    ## get section information
     # loop through sections
-    sections_list = []
-    for section_url in section_urls:
- 
-        # get section data
-        section_response = fetch_all(
-            html_session,
-            section_url
-            )
+    for section_data in sections_data:
+        section_url, price_text, section_warning = section_data
+        
+        # fetch section data
+        section_response = html_session.get(section_url)
 
-        # parse section data
-        new_section = parse_section_data(
-            section_url,
-            section_response,
-            provider
-            )
+        # parse course id
+        section_id = section_response.html.find('meta[property="og:title"]', first = True).attrs["content"]
+
+        # parse course name
+        section_name = section_response.html.find('meta[property="og:title"]', first = True).attrs["content"]
+
+        # parse available seats
+        if section_warning == "Sold Out!":
+            available_seats = 0
+
+        elif section_warning == "1 spot left":
+            available_seats = 1
+
+            
+        elif section_warning == "2 spots left":
+            available_seats = 2
+
+        elif section_warning == "3 spots left":
+            available_seats = 3
+
+        elif section_warning == "Only a few spaces left":
+            available_seats = 4
+
+        else:
+            available_seats = default_seats
+
+        # parce price
+        if price_text[0] == "$":
+            section_price = float(price_text[1:])
+        else:
+            section_price = 0
+
+        # parce location type
+        location_type= "default"
+
+        # parce location
+        section_location = {}
+
+        # parce sessions
+        sessions = []
+
+        session_container = section_response.html.find('td')
+        sessions_items = [item.text for item in session_container]
+        item_count = len(sessions_items)
+        for i in range(0, item_count, 2):
+            # determine data
+            date_text = sessions_items[i]
+            date_value = datetime.strptime(date_text, "%A, %B %d, %Y").date()
+            session_date = date_value.strftime("%Y-%m-%d")
+            
+            # determine start time
+            start_time_text = sessions_items[i+1]
+            start_time_value = datetime.strptime(start_time_text, "%I:%M %p").time()
+            session_start_time = start_time_value.strftime("%H:%M:%S")
+
+            # determine end time
+            # use default length if necessary
+            end_time_value = (datetime.combine(datetime.min, start_time_value) + timedelta(hours = default_session_hours)).time()
+            session_end_time = end_time_value.strftime("%H:%M:%S")
+
+            # construct new session
+            session = {
+                "date": session_date,
+                "start_time": session_start_time,
+                "end_time": session_end_time
+            }
+
+            # add to session list
+            sessions.append(session)
+
+        # parse notes:
+        section_notes = ""
+
+        # parse teacher(s):
+        section_teacher = ""
+
+        # parse enrollment close
+        enrollment_close = ""
+
+        # construct new section
+        section = {
+            "provider_course_id": section_id,
+            "course_name": section_name,
+            "url": section_url,
+            "available_seats": available_seats,
+            "price": section_price,
+            "sessions": sessions,
+            "location_type": location_type,
+            "location": section_location,
+            "notes": section_notes,
+            "teacher": section_teacher,
+            "enrollment_close_datetime": enrollment_close,
+            }
 
         # check if section is valid & if valid add to sections list
-        valid = is_valid_section(new_section, provider)
+        valid = True
 
+        if available_seats == 0:
+            valid = False
+
+        if section_price == 0:
+            valid = False
+
+        section_name_lowercase = section_name.lower()
+        index = section_name_lowercase.find("seminar")
+        if index >= 0:
+            valid = False
+            
         if valid:
-            sections_list.append(new_section)
+            sections.append(section)
 
     # close html session
     html_session.close()
 
-    # construct scrape object
-    new_scrape = Scrape(
-        provider.name,
-        provider.records,
-        purge_before,
-        sections_list, 
-    )
+    # construct new scrape
+    scrape = {
+        "provider": "Actors Connection",
+        "records": "all except seminars",
+        "purge_before": purge_before,
+        "sections": sections,
+        "scrape_notes": [] 
+    }
 
-    # convert scrape object to json object
-    new_scrape_dictionary = new_scrape.get_dictionary()
-    scrape_json = json.dumps(new_scrape_dictionary)
 
-    # endpoint = "https://horseshoe.coursehorse.com/sync"
-    # post_json_data(endpoint, scrape_json)
+    scrape_json = json.dumps(scrape)
+    indented_json = json.dumps(scrape, indent=2)
+    print(indented_json)
 
-    # indented_json = json.dumps(new_scrape_dictionary, indent=2)
-    # print(indented_json)
+    # file_path = "test.json"
+    # with open(file_path, 'w') as json_file:
+    #     json.dump(scrape_json, json_file)
 
-    file_path = "test.json"
-    with open(file_path, 'w') as json_file:
-        json.dump(scrape_json, json_file)
 
-    print(f'{len(new_scrape.sections)} sections found')
+    print()
+    print(f"{len(scrape['sections'])} sections found")
 
-## PROVIDERS
-actorsconnection = Provider(
-    name = "Actors Connection",
-    url = 'https://www.actorsconnection.com/classes/',
-    records = "all except seminars",
-    page_url_tag = 'ul.pagination',
-    section_url_tag = 'div.listing.clearfix',
-    section_id_tag = 'meta[property="og:title"]',
-    section_name_tag = 'meta[property="og:title"]',
-    section_available_tag = 'p.full-class',
-    section_price_tag = 'div.price',
-    section_teacher_tag = 'h2',
-    page_url_start = 1,
-    page_url_stop = -1,
-    url_prefix = "https:",
-    default_session_length = 2,
-    remove_if = ["seminar"]
-)
+def scrape_all_providers():
+    scrape_actors_connection()
 
 ## MAIN
-provider_list = [actorsconnection]
-for provider in provider_list:
-    scrape_provider(provider)
+scrape_all_providers()
         
 
