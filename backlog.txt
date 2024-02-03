@@ -1,30 +1,24 @@
 ## NOTES
-assumes 5 seats are available if class is not full
+removes free classes
+removes full classes
+removes seminars
+
+assumes 6 seats are available if no other information
 assumes length of session is 2 hours
 
+sends separate scrape json for each page with purge before for each page!
+
 ## TO DO
-construct separate json objects if more than 100 sections
-construct dictionary using for key, value in vars(self).items():
+parse teacher(s) as string or as list?
+parse enrollment close
+parse notes
+include scrape notes?
 short course name up to first comma?
 
-m parse available seats
-    are available seats by section or by session?
-    sold out, only a few seats available other?
-
-m price
-    error handling for "This event is full."?
-    error handling for "Registration is closed for this event."?
-    others?
-
-m parse teacher better including multiple teachers?
 
 m purge_before timestamp
     12 vs 24? 
     Eastern Time Zone
-
-parse notes
-parse enrollment close
-scrape notices?
 
 correct providers?
 correct provider course ids?
