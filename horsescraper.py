@@ -200,29 +200,38 @@ def scrape_actors_connection():
             section_notes = ""
 
             # parse teacher(s):
-            teachers = response.html.find('h2:not([dir])')
+            teachers = response.html.find('h2')
 
             section_teacher = ""
             for teacher in teachers:
                 # extract text
-                text = teacher.text
+                teacher_text = teacher.text
                 
                 # if no text
-                if not text:
+                if teacher_text == "":
                     pass
 
                 # if instruction
-                elif text[-1] == ":" :
+                elif teacher_text[-1] == ":" :
                     pass
-                
+
+                # if Q&A
+                elif teacher_text[0:3] == "Q&A" :
+                    pass
+
+                # if Hi!
+                elif teacher_text[0:3] == "Hi!" :
+                    pass
+                    
                 # if teacher
                 else:
+                    print(teacher_text)
                     # if not first teacher, add comma
                     if section_teacher:
                         section_teacher += ", "
                         
                     # add teacher
-                    section_teacher += teacher.text
+                    section_teacher += teacher_text
 
             # parse enrollment close
             enrollment_close = ""
@@ -267,7 +276,7 @@ def scrape_actors_connection():
     
         # construct new scrape
         scrape = {
-            "provider": "ActorsConnection",
+            "provider": "Actors Connection",
             "records": records,
             "purge_before": purge_before,
             "sections": sections,
@@ -275,7 +284,9 @@ def scrape_actors_connection():
         }
 
         scrape_json = json.dumps(scrape)
-        file_path = scrape["provider"] + str(page_number) + ".json"
+        provider_no_spaces = scrape["provider"].replace(" ", "")
+        file_path = provider_no_spaces + str(page_number) + ".json"
+        
         with open(file_path, 'w') as json_file:
             json.dump(scrape_json, json_file)
 
