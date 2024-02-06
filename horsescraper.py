@@ -1,17 +1,19 @@
 '''
 ## NOTES
 adds course ids
-
 sends separate scrape json for each page with purge before for each page!
 
 ## TO DO
 use session length to intuit session end times
+classes with email address as location?
+need to fix classes that start at 16:00? end at 01:00?
 
 '''
 
 ### LIBRARIES
 from datetime import datetime, timedelta
 import json
+import math
 from requests_html import HTMLSession
 
 ### FUNCTIONS
@@ -355,39 +357,86 @@ def scrape_big_apple_safety():
                 sessions = []
 
                 # extract length of session
+                session_length_days = 1
+                session_length_hours = default_session_hours
+                
                 length_element = section_response.html.find('input[name="inpCourseLength"]', first=True)
                 if length_element:
                     session_length_text = length_element.attrs['value']
-                    session_length_hours = default_session_hours
+                    quantity, unit = session_length_text.split()
+                    quantity = float(quantity)
+                    unit = unit.lower()
 
-                else:
-                    session_length_hours = default_session_hours
+                    if unit in ["hour", "hours"]:
+                        if quantity <= 6:
+                            session_length_days = 1
+                            session_length_hours = quantity
+
+                        elif quantity == 10:
+                            session_length_days = 1
+                            session_length_hours = 11
+                            
+                        else:
+                            session_length_days = math.ceil(quantity / 8)
+                            session_length_hours = 9
+
+                    if unit in ["day", "days"]:
+                        session_length_days = math.ceil(quantity)
+                        session_length_hours = 9
 
                 # extract session drop down
+                session_online = False
+                session_date = ""
+                session_start_time = "08:00:00"
+                session_end_time = "17:00:00"
+                                        
                 select_element = section_response.html.find('select[name="inpCourseShedule"]', first=True)
                 if select_element:
                     option_elements = select_element.find('option')
 
                     # loop through session options
                     for option in option_elements:
-                        value = option.attrs['value']
-                        date_text, start_time_text, _ = value.split('|')
 
-                        date_value = datetime.strptime(date_text, "%Y-%m-%d").date()
-                        session_date = date_value.strftime("%Y-%m-%d")
-                
-                        start_time_value = datetime.strptime(start_time_text, "%I:%M %p").time()
-                        session_start_time = start_time_value.strftime("%H:%M:%S")
+                        if option.text in ["ONLINE ANYTIME"]:
+                            session_online = True
+                    
+                        if session_online:
+                            session_date = "online anytime"
+                            session_start_time = "00:00:00"
+                            session_end_time = "00:00:00"
 
-                        end_time_value = (datetime.combine(datetime.min, start_time_value) + timedelta(hours = session_length_hours)).time()
-                        session_end_time = end_time_value.strftime("%H:%M:%S")
+                        else:
+                            option_value = option.attrs['value']
+                            date_text, start_time_text, _ = option_value.split('|')
 
-                        # construct new session
+                            date_value = datetime.strptime(date_text, "%Y-%m-%d").date()
+                            session_date = date_value.strftime("%Y-%m-%d")
+                    
+                            start_time_value = datetime.strptime(start_time_text, "%I:%M %p").time()
+                            session_start_time = start_time_value.strftime("%H:%M:%S")
+
+                            end_time_value = (datetime.combine(date_value, start_time_value) +
+                                              timedelta(days = session_length_days - 1) +
+                                              timedelta(hours = session_length_hours)).time()
+                            session_end_time = end_time_value.strftime("%H:%M:%S")
+
                         session = {
                             "date": session_date,
                             "start_time": session_start_time,
                             "end_time": session_end_time
                         }
+
+                        '''
+                        ### REMOVE ###
+                        if session_start_time != "16:00:00":
+                            print(section_url)
+                            print(session_online)
+                            print(option_value)
+                            print(session_length_text)
+                            print(session_date, session_start_time, session_end_time)
+                            print()
+                        ### REMOVE ###
+                        '''
 
                         # add to session list
                         sessions.append(session)
@@ -479,8 +528,9 @@ def scrape_big_apple_safety():
             break
 
 def scrape_all_providers():
-    scrape_actors_connection()
+    # scrape_actors_connection()
     scrape_big_apple_safety()
 
 ## MAIN
 scrape_all_providers()
+        
