@@ -1,20 +1,11 @@
 '''
 ## NOTES
-removes free classes
-removes full classes
-removes seminars
-
-assumes 6 seats are available if no other information
-assumes length of session is 2 hours
+adds course ids
 
 sends separate scrape json for each page with purge before for each page!
 
 ## TO DO
-parse teacher(s) as string or as list?
-parse enrollment close
-parse notes
-include scrape notes?
-parse short course name up to comma?
+use session length to intuit session end times
 
 '''
 
@@ -127,7 +118,10 @@ def scrape_actors_connection():
             response = html_session.get(section_url)
 
             # parse course id
-            section_id = response.html.find('meta[property="og:title"]', first = True).attrs["content"]
+            section_id = ""
+            pid_container = response.html.find('input[name="pid"]', first=True)
+            if pid_container:
+                section_id = pid_container.attrs['value']
 
             # parse course name
             section_name = response.html.find('meta[property="og:title"]', first = True).attrs["content"]
@@ -225,7 +219,6 @@ def scrape_actors_connection():
                     
                 # if teacher
                 else:
-                    print(teacher_text)
                     # if not first teacher, add comma
                     if section_teacher:
                         section_teacher += ", "
@@ -268,13 +261,10 @@ def scrape_actors_connection():
             if valid:
                 sections.append(section)
 
-        # close html session
-        html_session.close()
-
-        # parse records
+        ## parse records
         records = "Page " + str(page_number)
     
-        # construct new scrape
+        ## construct new scrape
         scrape = {
             "provider": "Actors Connection",
             "records": records,
@@ -283,20 +273,214 @@ def scrape_actors_connection():
             "scrape_notes": [] 
         }
 
+        ## write to file
         scrape_json = json.dumps(scrape)
         provider_no_spaces = scrape["provider"].replace(" ", "")
         file_path = provider_no_spaces + str(page_number) + ".json"
         
         with open(file_path, 'w') as json_file:
             json.dump(scrape_json, json_file)
-
+    
+        ## print
         # indented_json = json.dumps(scrape, indent=2)
         # print(indented_json)
         
         print(f"{len(scrape['sections'])} sections found", "\n")
 
+def scrape_big_apple_safety():
+    # set constants
+    provider_url = "https://baos.com/training-safety-course/"
+    url_prefix = ""
+    default_seats = 25
+    default_session_hours = 9
+
+    # get time stamp
+    tmp = datetime.now()
+    purge_before = tmp.strftime("%Y-%m-%d %H:%M:%S")
+
+    # open html session
+    html_session = HTMLSession()
+
+    # fetch first page
+    next_url = provider_url
+    navigation_response = html_session.get(next_url)
+    page_number = 1
+    
+    # while next link exist
+    while next_url:
+        # if valid response
+        if navigation_response.status_code == 200:
+            # create list for sections
+            sections = []
+            
+            # loop through sections
+            articles = navigation_response.html.find('article')
+            for article in articles:                
+                # extract section url
+                section_container = article.find('h2.entry-title', first=True)
+                section_url = section_container.find('a', first=True).attrs['href']
+
+                # fetch section 
+                section_response = html_session.get(section_url)
+
+                # extract section id
+                section_id = ""
+                id_container = section_response.html.find('input[name="inpCourseId"]', first=True)
+                if id_container:
+                    section_id = id_container.attrs['value']
+                
+                # extract section name
+                section_name = ""
+                name_container = section_response.html.find('input[name="inpCourseName"]', first=True)
+                if name_container:
+                    section_name = name_container.attrs['value']
+                    
+                # parse available seats
+                available_seats = default_seats
+
+                # parse price
+                cost_container = section_response.html.find('input#costInput', first=True)
+                if cost_container:
+                    cost_value = cost_container.attrs['value']
+                    section_price = float(cost_value[1:])
+
+                # parse location type
+                location_type = "default"
+
+                # parse location
+                section_location = {}
+
+                # parse sessions
+                # create list for sessions
+                sessions = []
+
+                # extract length of session
+                length_element = section_response.html.find('input[name="inpCourseLength"]', first=True)
+                if length_element:
+                    session_length_text = length_element.attrs['value']
+                    session_length_hours = default_session_hours
+
+                else:
+                    session_length_hours = default_session_hours
+
+                # extract session drop down
+                select_element = section_response.html.find('select[name="inpCourseShedule"]', first=True)
+                if select_element:
+                    option_elements = select_element.find('option')
+
+                    # loop through session options
+                    for option in option_elements:
+                        value = option.attrs['value']
+                        date_text, start_time_text, _ = value.split('|')
+
+                        date_value = datetime.strptime(date_text, "%Y-%m-%d").date()
+                        session_date = date_value.strftime("%Y-%m-%d")
+                
+                        start_time_value = datetime.strptime(start_time_text, "%I:%M %p").time()
+                        session_start_time = start_time_value.strftime("%H:%M:%S")
+
+                        end_time_value = (datetime.combine(datetime.min, start_time_value) + timedelta(hours = session_length_hours)).time()
+                        session_end_time = end_time_value.strftime("%H:%M:%S")
+
+                        # construct new session
+                        session = {
+                            "date": session_date,
+                            "start_time": session_start_time,
+                            "end_time": session_end_time
+                        }
+
+                        # add to session list
+                        sessions.append(session)
+
+                # parse notes
+                section_notes = ""
+
+                # parse teachers
+                section_teacher = ""
+
+                # parse enrollment close
+                enrollment_close = ""
+
+                # construct new section
+                section = {
+                    "provider_course_id": section_id,
+                    "course_name": section_name,
+                    "url": section_url,
+                    "available_seats": available_seats,
+                    "price": section_price,
+                    "sessions": sessions,
+                    "location_type": location_type,
+                    "location": section_location,
+                    "notes": section_notes,
+                    "teacher": section_teacher,
+                    "enrollment_close_datetime": enrollment_close,
+                }
+
+                # add to sections list
+                sections.append(section)
+
+            # parse records
+            records = "Page " + str(page_number)
+
+            # construct new scrape
+            scrape = {
+                "provider": "Big Apple Occupational Safety",
+                "records": records,
+                "purge_before": purge_before,
+                "sections": sections,
+                "scrape_notes": [] 
+            }
+
+            ## write to file
+            scrape_json = json.dumps(scrape)
+            provider_no_spaces = scrape["provider"].replace(" ", "")
+            file_path = provider_no_spaces + str(page_number) + ".json"
+            
+            with open(file_path, 'w') as json_file:
+                json.dump(scrape_json, json_file)
+
+            ## print
+
+            ### REMOVE ###
+            from random import randint
+            count = len(scrape["sections"])
+            index = randint(0, count - 1)
+            tmp = scrape["sections"][index]
+            indented_json = json.dumps(tmp, indent=2)
+            print(indented_json)
+            ### REMOVE ###
+
+            # indented_json = json.dumps(scrape, indent=2)
+            # print(indented_json)
+            
+            print(f"{len(scrape['sections'])} sections found", "\n")
+            
+            # extract link for next page
+            next_url_container = navigation_response.html.find('link[rel="next"]', first = True)
+                
+            # if next page exists
+            if next_url_container:
+                # extract url for next page
+                next_url = next_url_container.attrs['href']
+
+                # fetch next page
+                navigation_response = html_session.get(next_url)
+
+                # increment page number
+                page_number += 1
+
+            else:
+                break
+
+        # if error 
+        else:
+            # log error
+            log_error_message("GET", provider_url, navigation_response.status_code)
+            break
+
 def scrape_all_providers():
     scrape_actors_connection()
+    scrape_big_apple_safety()
 
 ## MAIN
 scrape_all_providers()
